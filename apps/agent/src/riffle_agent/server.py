@@ -42,6 +42,7 @@ async def _run(req: StreamRequest) -> AsyncIterator[dict]:
     started = time.monotonic()
     finding_count = 0
     target_url = ""
+    scanned = False
 
     try:
         # stream_mode="updates" yields {node_name: state_delta} as each node finishes.
@@ -49,18 +50,49 @@ async def _run(req: StreamRequest) -> AsyncIterator[dict]:
             for delta in chunk.values():
                 if delta.get("target_url"):
                     target_url = delta["target_url"]
-                for finding in delta.get("findings", []) or []:
-                    finding_count += 1
-                    yield _sse({"type": "finding", "finding": finding})
 
-        yield _sse(
-            {
-                "type": "scan_complete",
-                "targetUrl": target_url,
-                "findingCount": finding_count,
-                "durationMs": int((time.monotonic() - started) * 1000),
-            }
-        )
+                if "findings" in delta:
+                    scanned = True
+                    for finding in delta["findings"] or []:
+                        finding_count += 1
+                        yield _sse({"type": "finding", "finding": finding})
+
+                if delta.get("explanation"):
+                    f = delta["explanation"]
+                    yield _sse(
+                        {
+                            "type": "explanation",
+                            "findingId": f["id"],
+                            "title": f["title"],
+                            "description": f["description"],
+                            "whyItMatters": f.get("whyItMatters"),
+                            "owasp": f.get("owasp"),
+                        }
+                    )
+
+                if delta.get("remediation"):
+                    f = delta["remediation"]
+                    yield _sse(
+                        {
+                            "type": "remediation",
+                            "findingId": f["id"],
+                            "title": f["title"],
+                            "remediation": f.get("remediation"),
+                        }
+                    )
+
+                if delta.get("error"):
+                    yield _sse({"type": "error", "message": delta["error"]})
+
+        if scanned:
+            yield _sse(
+                {
+                    "type": "scan_complete",
+                    "targetUrl": target_url,
+                    "findingCount": finding_count,
+                    "durationMs": int((time.monotonic() - started) * 1000),
+                }
+            )
     except Exception as exc:  # noqa: BLE001 — surface any failure as an error event
         yield _sse({"type": "error", "message": str(exc)})
 

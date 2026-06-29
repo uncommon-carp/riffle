@@ -3,12 +3,11 @@ import type { RemediationEvent } from "@riffle/types";
 export function RemediationSteps({ event }: { event: RemediationEvent }) {
   return (
     <section style={{ padding: 12 }}>
-      <h3>Remediation — {event.findingId}</h3>
-      <ol>
-        {event.steps.map((step, i) => (
-          <li key={i}>{step}</li>
-        ))}
-      </ol>
+      <h3>
+        Remediation: {event.title}{" "}
+        <small style={{ opacity: 0.6 }}>({event.findingId})</small>
+      </h3>
+      <p>{event.remediation ?? "No remediation guidance provided."}</p>
     </section>
   );
 }
