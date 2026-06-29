@@ -1,0 +1,22 @@
+{
+  "name": "riffle",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Generative UI security agent powered by Sentinel findings.",
+  "workspaces": [
+    "apps/web",
+    "apps/bff",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "dev:web": "npm run dev --workspace apps/web",
+    "dev:bff": "npm run dev --workspace apps/bff"
+  }
+}
