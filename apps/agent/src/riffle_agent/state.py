@@ -9,11 +9,23 @@ from langgraph.graph.message import add_messages
 Intent = Literal["scan", "explain", "remediate", "re_scan", "unknown"]
 
 
-class Finding(TypedDict):
+class Finding(TypedDict, total=False):
+    """Mirrors Sentinel's Finding (see @uncommon-carp/sentinel core/types.ts).
+
+    ``id`` is a rule id (not unique per run); ``whyItMatters``/``remediation``
+    are rule-level and feed the explain/remediate nodes directly.
+    """
+
     id: str
-    category: str
+    title: str
     severity: str
-    detail: str
+    description: str
+    whyItMatters: str
+    remediation: str
+    owasp: str
+    evidence: dict
+    tags: list[str]
+    suite: str
 
 
 class AgentState(TypedDict, total=False):
@@ -24,4 +36,7 @@ class AgentState(TypedDict, total=False):
     target_url: str
     finding_id: str
     findings: list[Finding]
+    explanation: Finding
+    remediation: Finding
+    error: str
     selected_model: str
