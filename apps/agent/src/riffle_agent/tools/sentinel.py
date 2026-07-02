@@ -30,10 +30,27 @@ from riffle_agent.state import Finding
 # "stub" (default) returns canned findings so the agent runs with no Sentinel
 # install or live target; "real" shells out to the Sentinel CLI.
 _MODE = os.environ.get("SENTINEL_MODE", "stub")
-# How to invoke the CLI. Default fetches/runs the published package via npx.
-_SENTINEL_BIN = os.environ.get("SENTINEL_BIN", "npx --yes @uncommon-carp/sentinel")
 # Exit code 3 (and up) means the scan failed to run; 0–2 are valid outcomes.
 _FATAL_EXIT = 3
+
+
+def _default_sentinel_bin() -> str:
+    """How to invoke the Sentinel CLI when SENTINEL_BIN isn't set.
+
+    Prefer an adjacent local build (``../sentinel`` beside this repo, per
+    ARCHITECTURE.md) so real scans work offline; otherwise fall back to the
+    published package via npx.
+    """
+    # tools/sentinel.py → riffle_agent → src → agent → apps → repo root (parents[5]).
+    repo_root = Path(__file__).resolve().parents[5]
+    local_cli = repo_root.parent / "sentinel" / "dist" / "cli" / "index.js"
+    if local_cli.is_file():
+        return f"node {local_cli}"
+    return "npx --yes @uncommon-carp/sentinel"
+
+
+# How to invoke the CLI. Explicit SENTINEL_BIN wins; else auto-detect (see above).
+_SENTINEL_BIN = os.environ.get("SENTINEL_BIN") or _default_sentinel_bin()
 
 
 def run_scan(
