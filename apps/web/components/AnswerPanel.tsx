@@ -9,15 +9,18 @@ export function AnswerPanel({ event }: { event: AnswerEvent }) {
   return (
     <section
       style={{
-        padding: 12,
-        borderLeft: "3px solid #4a7",
-        background: "#f6faf7",
-        borderRadius: 4,
+        background: "var(--bg-1)",
+        border: "1px solid var(--border)",
+        borderLeft: "3px solid var(--green)",
+        borderRadius: 8,
+        padding: "12px 16px",
       }}
     >
-      <p style={{ margin: 0, whiteSpace: "pre-wrap" }}>{event.text}</p>
+      <p style={{ color: "var(--text)", margin: 0, whiteSpace: "pre-wrap" }}>{event.text}</p>
       {event.findingId ? (
-        <small style={{ opacity: 0.6 }}>re: {event.findingId}</small>
+        <small className="mono" style={{ color: "var(--muted)" }}>
+          re: {event.findingId}
+        </small>
       ) : null}
     </section>
   );
