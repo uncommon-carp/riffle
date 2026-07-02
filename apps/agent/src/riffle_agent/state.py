@@ -6,7 +6,7 @@ from typing import Annotated, Literal, TypedDict
 
 from langgraph.graph.message import add_messages
 
-Intent = Literal["scan", "explain", "remediate", "re_scan", "unknown"]
+Intent = Literal["scan", "explain", "remediate", "re_scan", "ask", "unknown"]
 
 
 class Finding(TypedDict, total=False):
@@ -38,5 +38,10 @@ class AgentState(TypedDict, total=False):
     findings: list[Finding]
     explanation: Finding
     remediation: Finding
+    # Free-form natural-language answer produced by the `ask` node.
+    answer: str
+    # A finding the `ask` node chose to surface into the display (the
+    # "worth surfacing" case). Shape: {message, findingId, severity}.
+    notice: dict
     error: str
     selected_model: str

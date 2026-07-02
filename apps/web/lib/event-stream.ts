@@ -5,14 +5,21 @@ import { FindingCard } from "@/components/FindingCard";
 import { ExplanationPanel } from "@/components/ExplanationPanel";
 import { RemediationSteps } from "@/components/RemediationSteps";
 import { ScanSummary } from "@/components/ScanSummary";
+import { AnswerPanel } from "@/components/AnswerPanel";
+import { NoticePanel } from "@/components/NoticePanel";
 import { ErrorBanner } from "@/components/ErrorBanner";
 
 /**
  * Maps a single agent event to its UI component. This is the core of the
  * "generative UI" idea: the agent decides what renders by the event it emits.
+ *
+ * `scan_started` is a control signal (it clears the display) with no visual of
+ * its own — the page handles it before this map, so it never reaches here.
  */
-export function renderEvent(event: AgentEvent): ReactElement {
+export function renderEvent(event: AgentEvent): ReactElement | null {
   switch (event.type) {
+    case "scan_started":
+      return null;
     case "finding":
       return createElement(FindingCard, { finding: event.finding });
     case "explanation":
@@ -21,6 +28,10 @@ export function renderEvent(event: AgentEvent): ReactElement {
       return createElement(RemediationSteps, { event });
     case "scan_complete":
       return createElement(ScanSummary, { event });
+    case "answer":
+      return createElement(AnswerPanel, { event });
+    case "notice":
+      return createElement(NoticePanel, { event });
     case "error":
       return createElement(ErrorBanner, { event });
     default: {

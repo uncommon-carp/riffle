@@ -68,12 +68,50 @@ export interface RemediationEvent {
   remediation?: string;
 }
 
+/**
+ * Emitted at the start of a scan, before any `finding`. Tells the frontend to
+ * reset the display canvas — a new scan replaces the previous results rather
+ * than appending to them. Questions (explain/remediate/answer) never emit this,
+ * so inquiring about findings leaves the display intact.
+ */
+export interface ScanStartedEvent {
+  type: "scan_started";
+  targetUrl: string;
+}
+
 /** Maps to ScanSummary. */
 export interface ScanCompleteEvent {
   type: "scan_complete";
   targetUrl: string;
   findingCount: number;
   durationMs: number;
+}
+
+/**
+ * A natural-language answer to a free-form question about the current findings.
+ * Maps to AnswerPanel and lands in the conversation thread — it does NOT reset
+ * the display. Unlike explanation/remediation (which surface a single finding's
+ * structured fields verbatim), this is prose synthesized across findings.
+ */
+export interface AnswerEvent {
+  type: "answer";
+  text: string;
+  /** Set when the answer is about one specific finding. */
+  findingId?: string;
+}
+
+/**
+ * The agent pulling something into the display while answering a question —
+ * the "unless the agent sees something worth surfacing" case. Appends a
+ * highlighted callout to the display canvas without resetting it. Maps to
+ * NoticePanel.
+ */
+export interface NoticeEvent {
+  type: "notice";
+  message: string;
+  /** The finding this notice draws attention to, if any. */
+  findingId?: string;
+  severity?: Severity;
 }
 
 /** Maps to ErrorBanner. */
@@ -84,11 +122,37 @@ export interface ErrorEvent {
 
 /** Discriminated union of every event the agent can stream. */
 export type AgentEvent =
+  | ScanStartedEvent
   | FindingEvent
   | ExplanationEvent
   | RemediationEvent
   | ScanCompleteEvent
+  | AnswerEvent
+  | NoticeEvent
   | ErrorEvent;
+
+/**
+ * Events that belong to the display canvas (reset on each scan) vs. the
+ * conversation thread (a persistent Q&A log). `scan_started` is neither — it's
+ * a control signal that clears the canvas.
+ */
+export type DisplayEvent = FindingEvent | ScanCompleteEvent | NoticeEvent;
+export type ConversationEvent =
+  | ExplanationEvent
+  | RemediationEvent
+  | AnswerEvent
+  | ErrorEvent;
+
+const DISPLAY_TYPES: ReadonlySet<AgentEventType> = new Set([
+  "finding",
+  "scan_complete",
+  "notice",
+]);
+
+/** True for events that render in the display canvas. */
+export function isDisplayEvent(event: AgentEvent): event is DisplayEvent {
+  return DISPLAY_TYPES.has(event.type);
+}
 
 /** The discriminant values, handy for exhaustive switches and tests. */
 export type AgentEventType = AgentEvent["type"];

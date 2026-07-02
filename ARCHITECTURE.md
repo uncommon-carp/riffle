@@ -69,6 +69,11 @@ Core orchestration. Graph nodes:
 - `explain` — takes a finding ID, returns structured explanation
 - `remediate` — takes a finding ID, returns structured remediation steps
 - `re_scan` — re-runs scan with modified parameters (e.g. auth headers)
+- `ask` — answers a free-form natural-language question about the current
+  findings. This is the "inquire without interrupting the display" path: it
+  emits a conversational `answer` (never a scan), and — only when the question
+  points at a specific finding — a `notice` that surfaces that finding into the
+  display. explain/remediate without a finding id fall through to `ask`.
 
 Each terminal node emits structured output mapped to a UI component type, not free text.
 
@@ -101,13 +106,24 @@ LangGraph astream_events
 
 Event types the frontend handles:
 
-| Event           | Component        |
-| --------------- | ---------------- |
-| `finding`       | FindingCard      |
-| `explanation`   | ExplanationPanel |
-| `remediation`   | RemediationSteps |
-| `scan_complete` | ScanSummary      |
-| `error`         | ErrorBanner      |
+| Event           | Component        | Region       |
+| --------------- | ---------------- | ------------ |
+| `scan_started`  | — (reset signal) | display      |
+| `finding`       | FindingCard      | display      |
+| `scan_complete` | ScanSummary      | display      |
+| `notice`        | NoticePanel      | display      |
+| `explanation`   | ExplanationPanel | conversation |
+| `remediation`   | RemediationSteps | conversation |
+| `answer`        | AnswerPanel      | conversation |
+| `error`         | ErrorBanner      | conversation |
+
+The frontend renders two regions. The **display canvas** holds scan results and
+is reset by each new scan — the agent emits `scan_started` before the fresh
+`finding` events, and the frontend clears the canvas on that signal. The
+**conversation thread** is a persistent Q&A log that questions append to without
+disturbing the display. A `notice` is the one exception: when the agent decides
+a question is "worth surfacing," it pushes a callout into the display canvas
+without resetting it.
 
 ---
 
