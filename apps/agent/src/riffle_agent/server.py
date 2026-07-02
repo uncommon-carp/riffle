@@ -52,7 +52,10 @@ async def _run(req: StreamRequest) -> AsyncIterator[dict]:
                     target_url = delta["target_url"]
 
                 if "findings" in delta:
+                    # A scan resets the display: signal the frontend to clear
+                    # the canvas before the fresh findings arrive.
                     scanned = True
+                    yield _sse({"type": "scan_started", "targetUrl": target_url})
                     for finding in delta["findings"] or []:
                         finding_count += 1
                         yield _sse({"type": "finding", "finding": finding})
@@ -78,6 +81,29 @@ async def _run(req: StreamRequest) -> AsyncIterator[dict]:
                             "findingId": f["id"],
                             "title": f["title"],
                             "remediation": f.get("remediation"),
+                        }
+                    )
+
+                if delta.get("answer"):
+                    yield _sse(
+                        {
+                            "type": "answer",
+                            "text": delta["answer"],
+                            "findingId": (delta.get("notice") or {}).get("findingId"),
+                        }
+                    )
+
+                # A question can surface a finding into the display without a
+                # rescan — the "worth surfacing" case. Emitted after the answer
+                # so the display update lands alongside the conversational reply.
+                if delta.get("notice"):
+                    n = delta["notice"]
+                    yield _sse(
+                        {
+                            "type": "notice",
+                            "message": n["message"],
+                            "findingId": n.get("findingId"),
+                            "severity": n.get("severity"),
                         }
                     )
 

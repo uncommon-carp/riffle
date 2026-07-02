@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import type { AgentEvent } from "@riffle/types";
+import { useState, type CSSProperties } from "react";
+import type { AgentEvent, DisplayEvent, ConversationEvent } from "@riffle/types";
+import { isDisplayEvent } from "@riffle/types";
 import { consumeEventStream, renderEvent } from "@/lib/event-stream";
 
 const MODELS = [
@@ -15,14 +16,68 @@ const MODELS = [
 const BFF_URL = process.env.NEXT_PUBLIC_BFF_URL ?? "http://localhost:3001";
 const DEV_JWT = process.env.NEXT_PUBLIC_DEV_JWT ?? "dev-token";
 
+// Shared style for the region headings ("Findings" / "Conversation").
+const SECTION_HEADING: CSSProperties = {
+  color: "var(--muted-light)",
+  fontSize: 12,
+  fontWeight: 600,
+  letterSpacing: "0.08em",
+  margin: 0,
+  textTransform: "uppercase",
+};
+
+// The conversation thread interleaves the agent's replies with a local echo of
+// what the user typed. The echo is a frontend-only concern, so it lives here
+// rather than in the shared agent event contract.
+type UserMessage = { type: "user"; text: string };
+type ThreadItem = ConversationEvent | UserMessage;
+
+// A stable id for this browser session. The agent keys its conversation memory
+// (checkpointed scan findings) on this, so follow-up questions can reference an
+// earlier scan. Persisted in sessionStorage so a reload keeps the same thread.
+function useSessionId(): string {
+  const [id] = useState(() => {
+    if (typeof window === "undefined") return "";
+    const KEY = "riffle-session-id";
+    let existing = window.sessionStorage.getItem(KEY);
+    if (!existing) {
+      existing = crypto.randomUUID();
+      window.sessionStorage.setItem(KEY, existing);
+    }
+    return existing;
+  });
+  return id;
+}
+
 export default function Home() {
+  const sessionId = useSessionId();
   const [model, setModel] = useState<string>(MODELS[0].id);
   const [input, setInput] = useState("");
-  const [events, setEvents] = useState<AgentEvent[]>([]);
+  // Two regions. The display canvas holds scan results and is reset by each new
+  // scan (via the `scan_started` signal). The conversation thread is a
+  // persistent Q&A log that questions append to without disturbing the display.
+  const [displayEvents, setDisplayEvents] = useState<DisplayEvent[]>([]);
+  const [conversation, setConversation] = useState<ThreadItem[]>([]);
   const [pending, setPending] = useState(false);
+
+  function handleEvent(event: AgentEvent) {
+    // A scan clears the canvas before its findings stream in.
+    if (event.type === "scan_started") {
+      setDisplayEvents([]);
+      return;
+    }
+    if (isDisplayEvent(event)) {
+      setDisplayEvents((prev) => [...prev, event]);
+    } else {
+      setConversation((prev) => [...prev, event]);
+    }
+  }
 
   async function sendMessage(text: string) {
     setPending(true);
+    // Echo the user's message into the conversation thread so questions read as
+    // a dialogue. Scans still reset the display; this log is separate.
+    setConversation((prev) => [...prev, { type: "user", text }]);
     try {
       const res = await fetch(`${BFF_URL}/api/chat`, {
         method: "POST",
@@ -30,25 +85,20 @@ export default function Home() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${DEV_JWT}`,
         },
-        body: JSON.stringify({ input: text, model }),
+        body: JSON.stringify({ input: text, model, sessionId }),
       });
 
       if (!res.ok || !res.body) {
-        setEvents((prev) => [
-          ...prev,
-          { type: "error", message: `Request failed (${res.status})` },
-        ]);
+        handleEvent({ type: "error", message: `Request failed (${res.status})` });
         return;
       }
 
-      await consumeEventStream(res.body, (event) => {
-        setEvents((prev) => [...prev, event]);
-      });
+      await consumeEventStream(res.body, handleEvent);
     } catch (err) {
-      setEvents((prev) => [
-        ...prev,
-        { type: "error", message: err instanceof Error ? err.message : String(err) },
-      ]);
+      handleEvent({
+        type: "error",
+        message: err instanceof Error ? err.message : String(err),
+      });
     } finally {
       setPending(false);
     }
@@ -123,7 +173,7 @@ export default function Home() {
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Paste a URL to scan, or ask to explain/fix a finding"
+            placeholder="Scan a URL, or ask about the findings…"
             disabled={pending}
             className="mono"
             style={{
@@ -144,12 +194,38 @@ export default function Home() {
       </form>
 
       <section style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 24 }}>
-        {events.length === 0 ? (
-          <p style={{ color: "var(--muted)" }}>No events yet.</p>
+        <h2 style={SECTION_HEADING}>Findings</h2>
+        {displayEvents.length === 0 ? (
+          <p style={{ color: "var(--muted)" }}>No scan yet. Enter a URL to scan.</p>
         ) : (
-          events.map((event, i) => <div key={i}>{renderEvent(event)}</div>)
+          <div style={{ display: "grid", gap: 12 }}>
+            {displayEvents.map((event, i) => (
+              <div key={i}>{renderEvent(event)}</div>
+            ))}
+          </div>
         )}
       </section>
+
+      {conversation.length > 0 ? (
+        <section style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 24 }}>
+          <h2 style={SECTION_HEADING}>Conversation</h2>
+          <div style={{ display: "grid", gap: 12 }}>
+            {conversation.map((event, i) =>
+              event.type === "user" ? (
+                <p
+                  key={i}
+                  className="mono"
+                  style={{ color: "var(--text)", fontSize: "0.9rem", margin: 0 }}
+                >
+                  <span style={{ color: "var(--teal)" }}>$</span> {event.text}
+                </p>
+              ) : (
+                <div key={i}>{renderEvent(event)}</div>
+              ),
+            )}
+          </div>
+        </section>
+      ) : null}
     </main>
   );
 }

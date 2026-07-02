@@ -1,6 +1,6 @@
 """Smoke tests for the agent graph (no model/network calls)."""
 
-from riffle_agent.graph.build import classify_intent, explain, remediate
+from riffle_agent.graph.build import _route, ask, classify_intent, explain, remediate
 
 _FINDING = {
     "id": "auth.jwt_alg_none",
@@ -11,6 +11,14 @@ _FINDING = {
     "remediation": "Reject the 'none' algorithm.",
     "owasp": "API2: Broken Authentication",
     "suite": "auth",
+}
+
+_CORS = {
+    "id": "cors.origin_reflection",
+    "title": "CORS reflects arbitrary Origin",
+    "severity": "medium",
+    "description": "Server reflects the request Origin.",
+    "suite": "cors",
 }
 
 
@@ -53,3 +61,52 @@ def test_explain_unknown_finding_returns_error():
     state = {"finding_id": "nope.not_here", "findings": [_FINDING]}
     result = explain(state)
     assert "error" in result
+
+
+def test_route_free_form_question_goes_to_ask():
+    # "which is worst" classifies as unknown (no scan/explain/fix keyword).
+    state = {"intent": "unknown", "findings": [_FINDING]}
+    assert _route(state) == "ask"
+
+
+def test_route_explain_without_finding_id_falls_through_to_ask():
+    state = {"intent": "explain", "findings": [_FINDING]}
+    assert _route(state) == "ask"
+
+
+def test_ask_answers_without_touching_findings():
+    # A general question produces a prose answer and no display change (no notice).
+    state = {
+        "messages": [{"role": "user", "content": "give me an overview"}],
+        "findings": [_FINDING, _CORS],
+    }
+    result = ask(state)
+    assert "2 finding" in result["answer"]
+    assert "notice" not in result
+
+
+def test_ask_surfaces_most_severe_on_superlative():
+    state = {
+        "messages": [{"role": "user", "content": "which one is the worst?"}],
+        "findings": [_CORS, _FINDING],
+    }
+    result = ask(state)
+    # Highest severity (critical) finding is surfaced into the display.
+    assert result["notice"]["findingId"] == "auth.jwt_alg_none"
+    assert result["notice"]["severity"] == "critical"
+
+
+def test_ask_surfaces_finding_named_by_suite():
+    state = {
+        "messages": [{"role": "user", "content": "anything about cors?"}],
+        "findings": [_FINDING, _CORS],
+    }
+    result = ask(state)
+    assert result["notice"]["findingId"] == "cors.origin_reflection"
+
+
+def test_ask_with_no_findings_prompts_to_scan():
+    state = {"messages": [{"role": "user", "content": "what did you find?"}], "findings": []}
+    result = ask(state)
+    assert "scan" in result["answer"].lower()
+    assert "notice" not in result
